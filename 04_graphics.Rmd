@@ -1,0 +1,576 @@
+---
+title: "資料視覺化"
+author: "Sung-Chien Lin"
+date: "2018年9月15日"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# 課程簡介
+
+## 課程簡介
+* 本次課程的目的為介紹R語言上主要的資料視覺化工具-- ggplot2
+* 包括以下的內容：
+    + 從csv檔讀入資料，儲存為data frame資料形態
+    + 利用tibble整理資料成適合分析的形式
+    + 進行簡單分析
+* 本次課程將以空氣品質指標資料為例，進行資料視覺化
+
+# 基本概念
+## 資料處理與分析的步驟
+1. 問題擬定
+2. 資料取得
+3. 資料清理
+4. 資料分析
+5. 結果解釋
+* 其中的第4和第5步驟都可以進行資料視覺化
+* 第4步驟：進行資料的探索分析，概觀資料的樣貌，擬定相關資料模型
+* 第5步驟：以圖形增強研究結果說明的印象和效用
+
+## 視覺化常見的應用問題
+* 分布(distribution)：某一數值資料的散佈情形
+    + 觀察重點： 最大值、最小值、集中化、異常
+* 比較(comparison)：比較某一類別資料在其對應數值上的差異
+    + 觀察重點： 大小、順序、分布範圍
+* 組成(compositon)：某一類別資料其對應數值的比例
+    + 觀察重點： 比例大小
+* 關係(relationship)：某兩個數值資料之間的關係
+    + 觀察重點： 模式(直線、週期)、分布範圍
+* 這些問題可以組合，例如比較類別的分布
+
+# 資料視覺化
+* 運用各種類型的圖表，以圖表上的位置、顏色、形狀、大小等視覺線索表現資料的分布、比較、組成和關係
+* 分布：以直方圖表示某一數值資料的散佈情形
+* 比較：以長條圖比較某一類別資料在其對應數值上的差異
+* 組成：以圓餅圖表示某一類別資料其對應數值的比例
+* 關係：以散佈圖或折線圖觀察某兩個數值資料之間的關係
+    + 如果兩個數值資料中，有一個是時間資料，特別適合使用折線圖觀察
+* 比較+分布：以盒狀圖或小提琴圖比較某一類別資料其對應數值的散佈情形
+
+## R 語言的資料視覺化工具 | ggplot2
+* ggplot2提供一套標準圖表與資訊視覺化的語法和套件
+    + Data 資料來源
+    + Aesthetics 視覺線索：位置、顏色、形狀、大小
+    + Geometrics 圖表類型
+    + Scales 資料編碼的表現形式
+    + Coordinates 座標類型
+    + Facets 圖表層面
+    + Themes 圖表外觀
+    
+## ggplot2的運作概念
+* 將做為資料來源的data frame上的每一筆紀錄，視為圖形上要呈現的一個圖形，
+* 先將紀錄上的欄位對應到位置、顏色、形狀或大小等資料編碼方式，
+* 然後選擇圖表類型，
+* 設定各種資料編碼方式的樣式，例如座標的尺度、調色板等，
+* 必要時調整圖形的座標類型、圖表層面和圖表外觀。
+    
+## 幾種常用的ggplot2資料編碼
+* x：x軸位置
+* y：y軸位置
+* color：點、線的顏色
+* fill：填入的顏色
+* size：大小
+* linetype：線的樣式
+* shape：點的樣式
+
+## 幾種常用的ggplot2圖表類型
+* geom_histogram()：直方圖
+* geom_col()：長條圖
+* geom_line()：折線圖
+* geom_point(), geom_jitter(), geom_count()：散佈圖、點狀圖
+* geom_boxplot()：盒狀圖
+* geom_violin()：小提琴圖
+* geom_area()：區域圖
+* geom_tile()：方塊圖
+
+# 載入ggplot2套件與讀取資料
+## 準備工作目錄與檔案
+* 在rCourse下，建立工作目錄04
+* 將02的空氣品質指標資料檔案複製到04下
+
+## 設定工作目錄
+* 首先開啟新的Script
+* 在Script上，設定工作目錄
+```{r}
+setwd("rCourse/04")
+```
+
+## 使用ggplot2套件
+* ggplot2是tidyverse中包含的一個套件
+* 可以使用library(tidyverse)載入
+* 在Script上輸入
+```{r}
+library(tidyverse)
+```
+* 或單獨使用library(ggplot2)載入
+```{r}
+library(ggplot2)
+```
+* 建議採用library(tidyverse)，可以一次載入多個資料處理套件
+
+## 讀取粉絲專頁發文資料csv檔案
+* 在Script上輸入
+```{r}
+aqi_data <- read.csv(file="AQI_20180128061645.csv",
+               fileEncoding="UTF-8-BOM", stringsAsFactors=FALSE)
+```
+
+## 讀取縣市地區對照資料
+* 在Script上輸入
+```{r}
+ca <- read.csv(file="county_area.csv",
+               fileEncoding="UTF-8", stringsAsFactors=FALSE)
+```
+* 注意：county_area.csv與AQI_20180128061645.csv的編碼方式不同，前者是UTF-8 without BOM，後者則是 UTF-8 with BOM
+
+## 將地區資料加入空氣品質指標資料
+```{r}
+aqi_data <- aqi_data %>%
+  left_join(ca)
+```
+
+## 將部分Character型態的資料欄位改成Factor
+```{r}
+aqi_data <- aqi_data %>%
+  mutate(County=factor(County)) %>%
+  mutate(Status=factor(Status, levels=c("良好", "普通", "對敏感族群不健康","對所有族群不健康"), ordered=TRUE)) %>%
+  mutate(Area=factor(Area))
+```
+
+## 以資料視覺化的方式回答以下的問題
+* 全台各地空氣品質指標的分布情形為何？
+* 各地區(北、中、南、東、離島)的觀測站數量與比例為何？
+* 各地區觀測站測得的空氣品質分布情形為何？
+* 各地區觀測站測得的PM10與PM2.5分布
+* PM2.5指標與AQI之間的關係為何？
+
+# 全台各地空氣品質指標分布情形的視覺化
+
+## 先了解各地空氣品質指標的統計摘要
+* 利用統計摘要summary()描述資料分布
+* 在Script上輸入
+```{r}
+aqi_data %>%
+  select(AQI) %>%         # 選擇AQI值欄位
+  summary()               # 對AQI值欄位資料統計摘要
+```
+
+## 資料分布一般採用直方圖
+* 在篩選非NA的AQI資料(刪除沒有內容的AQI資料)之後，以直方圖繪製AQI分布
+* 在Script上輸入
+* ggplot()：呼叫ggplot2繪圖程式
+* geom_histogram()：產生直方圖
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%    # 將沒有內容的AQI資料刪除
+  ggplot(aes(AQI)) +         #以直方圖繪製AQI分布
+  geom_histogram()
+```
+* ggplot2的直方圖geom_histogram()
+    + 將AQI值分為若干區間(例如：0~5, 6~10, 11~15, ...)
+        - 預設為30個區間
+    + 統計AQI值在各區間內的觀測站數
+
+## 設置區間範圍
+* 將區間的寬度設為10
+* 改寫前段的程式
+```{r}
+x_breaks <- seq(0, max(aqi_data$AQI, na.rm=TRUE)+10, 10) # 產生劃分資料的區間
+
+aqi_data %>%
+  filter(!is.na(AQI)) %>%    # 將沒有內容的AQI資料刪除
+  ggplot(aes(AQI)) +
+  geom_histogram(breaks=x_breaks)
+```
+
+## 加入X軸座標
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%    # 將沒有內容的AQI資料刪除
+  ggplot(aes(AQI)) +
+  geom_histogram(breaks=x_breaks) +
+  scale_x_continuous(breaks = x_breaks, minor_breaks=NULL)
+```
+
+## 修改與加入標題
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%    # 將沒有內容的AQI資料刪除
+  ggplot(aes(AQI)) +
+  geom_histogram(breaks=x_breaks) +
+  scale_x_continuous(breaks = x_breaks, minor_breaks=NULL) +
+  labs(x="AQI值", y="觀測站數",
+       title="觀測站測得的AQI大多數在50以下",
+       subtitle="除少數地區外，全台空氣品質較佳")
+```
+
+## 練習
+* 將直方圖的y軸座標(觀測站數)主要間隔設為1
+
+## 練習
+* 所有的PM2.5資料分布情形
+
+## 簡要複習
+* ggplot2如何畫出data frame上的每一筆紀錄：
+    + ggplot(aqi_data, aes(AQI))：使用資料來源aqi_data。根據AQI的值，決定記錄在x軸上的位置。
+    + geom_histogram(breaks=x_breaks)以直方圖做為圖表。根據AQI的值，將所有紀錄指派到x_breaks表示的各個區間上，以每一個區間上的記錄數量為這個區間的高度。
+* scale_x_continuous(breaks=x_breaks, minor_breaks)將圖表的主要刻度設為x_breaks上的各個區間，並且不要次要刻度。
+
+# 各地區的觀測站數量與比例為何？
+
+## 統計各地區的觀測站數量
+* 將紀錄依據地區分類，統計各地區上的觀測站數量，形成新的data frame。
+* 新的data frame上每一筆紀錄對應到一個地區以及它的觀測站數量。
+```{r}
+area_data <- aqi_data %>%
+  group_by(Area) %>%
+  summarise(count=n())
+```
+
+## 運用ggplot的長條圖繪製各地區的觀測站數量
+* ggplot(area_data, aes(x=Area, y=count))
+    + 以area_data做為資料來源，比較每一個地區的觀測站數量。
+    + 地區放置在圖形的x軸上
+    + 每一筆紀錄的發文數量放置在圖形的y軸上
+* geom_col()長條圖
+```{r}
+area_data %>%
+  ggplot(aes(x=Area, y=count)) +
+  geom_col()
+```
+* 最好將長條圖進行排序
+
+## 加上排序的長條圖
+* 利用ggplot2繪製長條圖時，X軸改為依據count降冪排序後的地區。
+* 在Script上加入下面指令
+```{r}
+area_data %>%
+  ggplot(aes(x=reorder(Area, desc(count)), y=count)) +
+  geom_col()
+```
+
+## 修改y軸上的標示
+* 修改Script，加上scale_y_continuous()修改y軸上的標示
+```{r}
+area_data %>%
+  ggplot(aes(x=reorder(Area, desc(count)), y=count)) +
+  geom_col() +
+  scale_y_continuous(breaks=seq(0, max(area_data$count)+5, 5))
+```
+
+## 加上標題
+* 修改Script，利用labs()加上標題
+```{r}
+area_data %>%
+  ggplot(aes(x=reorder(Area, desc(count)), y=count)) +
+  geom_col() +
+  scale_y_continuous(breaks=seq(0, max(area_data$count)+5, 5)) +
+  labs(x="地區", y="觀測站數量", title="東部和離島的觀測站數量較少")
+```
+
+## 統計各類型的發文比例
+```{r}
+area_data <- area_data %>%
+  mutate(percentage=round(count/sum(count)*100, 2))
+```
+
+## 劃出長條圖
+```{r}
+area_data %>%
+  ggplot(aes(x=reorder(Area, desc(percentage)), y=percentage)) +
+  geom_col()
+```
+
+## 練習
+* 修改y軸標示與加上標題
+```{r echo=FALSE}
+area_data %>%
+  ggplot(aes(x=reorder(Area, desc(percentage)), y=percentage)) +
+  geom_col() +
+  scale_y_continuous(breaks=seq(0, max(area_data$percentage)+5, 5)) +
+  labs(x="地區", y="觀測站數量百分比(%)", title="北部與南部的觀測站數量接近3/4")
+```
+
+## 簡要複習
+* 長條圖需要指定data frame上的兩個欄位
+    + x軸為名目尺度的資料型態 Area
+    + y軸為連續尺度的資料型態 count 或 percentage
+* 因為長條圖用於比較記錄之間在某一個欄位的大小以及表現它們的次序，所以可以加上大小排序
+
+# 各地區觀測站測得的空氣品質分布情形為何？
+
+##  比較各地區觀測站測得的空氣品質分布
+* 比較+分布
+* 在一張圖上，同時顯示多個分布圖
+    + 將不同地區放置於橫軸上的各個部分
+    + 縱軸表示分布情形
+
+## 使用盒狀圖畫出各地區觀測站測得的空氣品質分布
+* geom_boxplot()盒狀圖
+   + 盒子中的橫線表示中位數，上下緣分別代表第三和第一四分位數
+   + 盒子的高是四分位距，代表資料的分散程度，盒子愈高表示資料愈分散
+   + 盒子上下的直線外的點表示極端值或離群值
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=Area, y=AQI)) +
+  geom_boxplot() +
+  labs(x="地區", y="AQI", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差")
+```
+
+## 以不同的顏色呈現各地區的AQI分布
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=Area, y=AQI, color=Area)) +
+  geom_boxplot() +
+  labs(x="地區", y="AQI", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差")
+```
+
+## 取消圖例(legend)
+* theme(legend.position="none")取消圖例
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=Area, y=AQI, color=Area)) +
+  geom_boxplot() +
+  labs(x="地區", y="AQI", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差") +
+  theme(legend.position="none")
+```
+
+## 使用小提琴圖畫出各地區觀測站測得的空氣品質分布
+* geom_violin()小提琴圖
+   + 小提琴的寬度表示資料在這個數值的分布情形，愈高的話分布的資料愈多
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=Area, y=AQI, color=Area)) +
+  geom_violin() +
+  labs(x="地區", y="AQI", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差") +
+  theme(legend.position="none")
+```
+
+## 使用點狀圖畫出各地區觀測站測得的空氣品質分布
+*以各發文類型為x軸，將每一筆紀錄依據它們的按讚次數在相對應的發文類型上畫出一個點
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=Area, y=AQI, color=Area)) +
+  geom_jitter() +
+  labs(x="地區", y="AQI", color="空氣品質狀態", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差")
+```
+* 不用geom_point()的原因是圖形上的點若是x和y軸座標相同的話，會重疊在一起
+* geom_jitter()當x和y軸座標相同的話，會盡量繪製在附近，避免重疊。
+
+## 修改顏色
+* 將每個地區觀測站的AQI，依照不同狀態呈現
+* 良好：綠色，普通：黃色，對敏感族群不健康：橙色
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  mutate(StatusColor=case_when(
+    Status=="良好"~ "green",
+    Status=="普通"~ "yellow",
+    Status=="對敏感族群不健康"~ "orange"
+  )) %>%
+  ggplot(aes(x=Area, y=AQI, color=StatusColor)) +
+  geom_jitter() +
+  labs(x="地區", y="AQI", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差") +
+  scale_color_identity()
+```
+
+## 修改背景顏色
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  mutate(StatusColor=case_when(
+    Status=="良好"~ "green",
+    Status=="普通"~ "yellow",
+    Status=="對敏感族群不健康"~ "orange"
+  )) %>%
+  ggplot(aes(x=Area, y=AQI, color=StatusColor)) +
+  geom_jitter() +
+  labs(x="地區", y="AQI", color="空氣品質狀態", title="各地區空氣品質指標", subtitle="台灣南部空氣品質較差") +
+  scale_color_identity()+
+  theme(panel.background=element_rect(fill="black"))
+```
+
+# 各地區觀測站測得的PM10與PM2.5分布
+
+## 並列的圖表
+* 將多個相同類型的圖表並列
+* 以下以各地區觀測站的PM10與PM2.5資料為例，在並列的圖表上畫出表示兩個指標分布的盒狀圖
+
+## 取出各地區觀測站測得的PM10與PM2.5
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5)
+```
+
+## 從wide data format改為long data format
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5) %>%
+  gather(key=index, value=value, PM10, PM2.5)
+```
+
+## 利用圖表層面將各地區觀測站測得的PM10與PM2.5分布畫在並列的圖表上
+* 盒狀圖類似上面的做法，但利用facet_wrap(~index)，將兩種指標的盒狀圖並列
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5) %>%
+  gather(key=index, value=value, PM10, PM2.5) %>%
+  ggplot(aes(x=Area, y=value, color=Area)) +
+  geom_jitter() +
+  facet_wrap(~index)
+```
+
+## 取消圖例
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5) %>%
+  gather(key=index, value=value, PM10, PM2.5) %>%
+  ggplot(aes(x=Area, y=value, color=Area)) +
+  geom_jitter() +
+  facet_wrap(~index) +
+  theme(legend.position="none")
+```
+
+## 練習
+* 將X軸與Y軸的標題改為中文，並加上圖表標題
+```{r echo=FALSE}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5) %>%
+  gather(key=index, value=value, PM10, PM2.5) %>%
+  ggplot(aes(x=Area, y=value, color=Area)) +
+  geom_jitter() +
+  facet_wrap(~index) +
+  labs(x="地區", y="指標值",
+       title="各地區的PM10與PM2.5指標值",
+       subtitle="南部各觀測站的PM10指標均太高") +
+  theme(legend.position="none")
+```
+
+## 練習
+* 利用scale_color_brewer()修改圖形顏色
+```{r echo=FALSE}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  select(Area, SiteName, PM10, PM2.5) %>%
+  gather(key=index, value=value, PM10, PM2.5) %>%
+  ggplot(aes(x=Area, y=value, color=Area)) +
+  geom_jitter() +
+  facet_wrap(~index) +
+  labs(x="地區", y="指標值",
+       title="各地區的PM10與PM2.5指標值",
+       subtitle="南部各觀測站的PM10指標均太高") +
+  scale_color_brewer(type="qual", palette=2) +
+  theme_light() +
+  theme(legend.position="none")
+```
+
+## 簡要複習
+* 比較資料分布可利用點狀圖、盒狀圖和小提琴圖，三種圖形各有擅長表現的訊息。
+    + 點狀圖藉由點的密度表現資料分布情形，也能夠比較不同種類資料的數量，但無法表現重要的統計訊息，如中位數等。
+    + 盒狀圖節由關鍵位置的視覺圖示(如盒子的上下緣和中間的橫線等)表現出資料分布的重要統計訊息，但缺乏較細緻的資料分布情形，並且無法比較不同種類資料的數量。
+    + 小提琴圖由圖形寬度變化表現資料分布情形，可以大致看出資料的集中與分散，但無法表現重要的統計訊息，也無法比較不同種類資料的數量。
+* facet_wrap可以產生並列的圖形，但需要注意座標是否需要綁定。
+* 圖形的外觀可由theme()進行設定。
+
+# PM2.5指標與AQI之間的關係為何？
+
+## 散佈圖可以用來兩個數值之間的關係
+* 每一個觀測站在圖形上為一個點
+* PM2.5指標為點的x軸座標，AQI為點的y軸座標
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=PM2.5, y=AQI)) +
+  geom_point()
+```
+
+## 什麼樣類型的發文可以獲得較多的按讚數
+* 各種發文類型分布情形
+* 將發文的類型加入散佈圖
+  + 使不同類型的發文在散佈圖上有不同顏色
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=PM2.5, y=AQI, color=Area)) +
+  geom_point() +
+  scale_color_discrete() +
+  theme_light()
+```
+
+## 修改標題
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=PM2.5, y=AQI, color=Area)) +
+  geom_point() +
+  scale_color_discrete() +
+  labs(title="PM2.5與AQI之間的關係", color="地區") +
+  theme_light()
+```
+
+## 進行線性迴歸分析
+```{r}
+line_model <- lm(AQI~PM2.5, aqi_data, na.action = "na.omit")
+```
+* 利用summary(line_model)查看此次線性迴歸分析的結果
+* Intercept：線的y軸截距
+* PM2.5：線的斜率
+* R-squared：模型的符合情形(在0與1之間，R-squared愈大，模型愈符合)
+
+## 畫出直線
+```{r}
+aqi_data %>%
+  filter(!is.na(AQI)) %>%
+  ggplot(aes(x=PM2.5, y=AQI, color=Area)) +
+  geom_point() +
+  scale_color_discrete() +
+  labs(title="PM2.5與AQI之間的關係", color="地區") +
+  scale_x_continuous(limits=c(0, 50), breaks=seq(0, 50, 10)) +
+  scale_y_continuous(limits=c(0, 150), breaks=seq(0, 150, 30)) +
+  theme_light() +
+  geom_abline(intercept=14.3695, slope=2.0876, color="blue")
+```
+
+# 本次課程小結
+
+## 小結
+* 資料數值的分布情形： 直方圖
+  + x軸：數值資料
+* 同種資料數值之間的比較： 長條圖
+  + x軸：類型資料
+  + y軸：數值資料
+* 資料數值隨時間變化的關係： 折線圖
+  + x軸：時間資料
+  + y軸：數值資料
+* 兩種資料數值之間的關係： 散佈圖
+  + x軸：數值資料
+  + y軸：數值資料
+  + 若有第三種以上資料
+    - 類型資料： 點的顏色
+    - 數值資料： 點的大小
+* 資料分布的比較：盒狀圖、小提琴圖
+  + x軸：類型資料
+  + y軸：數值資料
+    
+## 小結
+* ggplot2畫圖步驟
+1. data frame --> ggplot()的第一項
+2. aes(x, y, color, fill, size) --> ggplot()的第二項
+3. geom_ --> 圖表樣式
+4. scal_ --> 資料樣式
+5. labs  --> 標題
+6. theme --> 圖表外觀

@@ -1,0 +1,523 @@
+---
+title: "R語言簡介"
+author: "Sung-Chien Lin"
+date: "2018年8月25日"
+output: 
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# 課程簡介
+
+## 課程簡介
+- 本次課程為R語言的基礎介紹
+- 主要目的在熟悉R語言的環境與基本用法
+- 重點在R語言的基本與特殊的資料型態
+
+# R語言基礎
+
+## R語言簡介
+* 自由的軟體程式語言
+* 用於統計分析、資料探勘、資料視覺化
+    + 內建多種統計及資料分析功能
+    + 可透過套件增強功能
+
+## R的資源
+* CRAN：下載R的執行檔、原始碼和說明文件，也收錄了各種套件
+* 請連線到https://cran.r-project.org/
+
+## R的編寫介面
+* R本身的介面不容易用於開發程式
+* RStudio：輔助R語言程式開發的IDE應用軟體
+* 請連線到https://www.rstudio.com/
+
+## RStudio介面
+* 請開啟RStudio
+
+## Rstudio的儀表板
+* Console：執行敘述，呈現敘述執行的結果
+* Source：開發程式開發
+* Environment：目前使用的變數與自行定義的函數
+* Help：查詢函數
+* Plots：繪圖
+
+# R語言基礎
+
+## R語言基礎 | 運算
+* 可以直接執行運算
+* 例如：請在RStudio的Console處輸入
+```{r}
+3*5
+```
+
+## R語言基礎 | 指定敘述
+* 可將運算結果儲存在某一個變數內
+* 例如：在Console處輸入下面的指定敘述
+```{r}
+var <- 3*5
+```
+- <-將右邊的運算結果指定給左邊的變數儲存
+* 在右上的Environment，查看變數var儲存的數值
+
+## R語言基礎 | 註解
+* '#'後的文字被忽略不考慮
+* 例如：在Console處再輸入下面的敘述
+```{r}
+#var <- 4*6
+```
+* 在右上的Environment，查看變數var儲存的數值
+* 新的敘述並沒有覆蓋舊的指定敘述
+
+## R語言基礎 | 查詢與設定工作目錄
+* 通常開始一個任務時，會將相關的程式和資料儲存在同一個資料夾
+    + 工作目錄
+* 在Console上，設定工作目錄
+```{r}
+setwd("C:/工作路徑/rCourse/任務X")
+```
+
+* 查看目前的工作目錄
+```{r}
+getwd()
+```
+- 事實上，setwd和getwd都是函數(function)，在R語言裡函數的使用相當重要
+
+## R語言基礎 | Help
+* 在Console上，查看某一個函數的用法
+```{r}
+help(setwd)
+```
+* 另一種常用的寫法
+```{r}
+?setwd
+```
+
+# R基本資料型態
+
+## R基本資料型態
+* integer
+* numeric
+* character
+* logic
+
+## R基本資料型態 | integer & numeric
+* 數值資料
+    + integer：整數
+    + numeric：實數
+
+## R基本資料型態 | integer & numeric
+* 數值運算
+    + `+` 加
+    + `-` 減
+    + `*` 乘
+    + `/` 除
+    + `^` 次方
+    + `%%` 整數除法的餘數
+    + `%/%` 整數除法的商
+    
+## 練習
+* 在Console下輸入下面的敘述，分別查看c, d, e
+```{r}
+a <- 5
+b <- 3
+c <- 5/3
+d <- 5%/%3
+e <- 5%%3
+```
+
+## R基本資料型態 | integer & numeric
+* 數值函數
+    + abs() 絕對值
+    + sqrt() 平方根
+    + round() 四捨五入
+    
+## 練習
+* 在Console下輸入下面的敘述，分別查看f, g
+```{r}
+f <- sqrt(2^4)
+g <- round(c)
+```
+
+
+## R基本資料型態 | character
+* character資料表示
+* 在Console上輸入下面指定敘述，並且查看strR和strVar
+```{r}
+strR <- "R"
+strVar <- "Langague"
+```
+
+## R基本資料型態 | character
+* character資料的函數
+    + paste() 字串連接
+    + substr() 取出字串的一部份
+
+## 練習
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+strCon <- paste(strR, strVar)
+strSub <- substr(strVar, 1, 4)
+```
+
+
+## R基本資料型態 | logic
+* TRUE(真)與FALSE(偽)
+* 邏輯運算
+    + `|` 或
+    + `&` 且
+    + `!` 否
+    
+## 練習
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+logValue1 <- 3>5
+logValue2 <- "R Language" == paste(strR, strVar)
+logValue3 <- logValue1 | logValue2
+logValue4 <- logValue1 & logValue2
+```
+
+# R特殊資料型態
+
+## R特殊資料型態
+* vector
+* factor
+* matrix and array
+* list
+* data frame
+
+## R特殊資料型態 | vector
+* 一序列相同型態的資料
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+intData <- c(1, 4, 6, 2, 5, 7, 8, 3)
+strData <- c("ab", "df", "4d", "32", "bc")
+```
+* 在右側的Environment上，觀察vector可以發現：intData為num[1:8]，而strData為chr[1:5]
+    + num, chr分別表示numeric和character資料型態
+    + [1:6], [1:5] vector的範圍
+
+## R特殊資料型態 | vector
+*元素
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+intData[4]
+intData[2:5]
+intData[c(1,3,5)]
+```
+* intData[4]表示intData的第2個元素
+* intData[2:5]表示intData的第2到第5個元素
+* intData[c(1,3,5)]表示intData的第1、3、5個元素
+
+## R特殊資料型態 | vector運算
+* 數值運算
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+intData * 5
+intData + c(1, 2, 3, 4, 5, 6, 7, 8)
+intData + c(1, 2, 3, 4)
+```
+* 當兩個vector進行運算時，較短的vector會自動延長，以便兩個vector上面的元素一一對應
+
+## R特殊資料型態 | vector運算
+* 合併vectors
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+c(intData, c(1, 2, 3, 4))
+
+```
+
+## R特殊資料型態 | vector方法
+* length()：vector長度，也就是vector上的元素個數
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+length(intData)
+```
+
+## R特殊資料型態 | vector方法
+* sum()：計算vector上的元素總和
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+sum(intData)
+```
+
+## R特殊資料型態 | vector方法
+* sort()：對vector上的元素排序
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+sort(intData)
+sort(intData, decreasing=TRUE)
+```
+* sort()函數中預設的decreasing為FALSE，將vector裡的元素由小到大排序
+* 將decreasing設為TRUE，將vector裡的元素由大到小排列
+
+## R特殊資料型態 | vector方法
+* 由小到大的順序
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+order(intData)
+intData[order(intData)]
+```
+* 想想看為何intData[order(intData)]的結果也是將intData裡的元素由小到大排序
+
+## R特殊資料型態 | vector方法
+* 由大到小的順序
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+order(vecEx, decreasing=TRUE)
+vecEx[order(vecEx, decreasing=TRUE)]
+
+```
+
+## R特殊資料型態 | 產生等差序列的vector
+* seq(from, to, by)：從開始的數值from，在不超過結尾數值by的情形下，每次增加一個數值by
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+seq(1, 8)
+seq(1, 8, 2)
+seq(1, 8, 1.5)
+```
+* seq(1, 8): from=1, to=8
+* seq(1, 8, 2): from=1, to=8, by=2
+* seq(1, 8, 1.5): from=1, to=8, by=1.5
+
+## R特殊資料型態 | 產生等差序列的vector
+* 如果差為1時，可以用冒號運算式
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+1:8
+```
+
+## 練習
+* 產生以下的數列
+    + 1到10間所有奇數
+    + 1到10間所有偶數
+    + 1到10間所有3的倍數
+    + 2的1到10乘方
+    
+## R特殊資料型態 | 產生重複序列的vector
+* rep(x, times)：將x重複times次
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+rep(1, 9)
+rep(1:2, 4)
+rep(c(4, 82, 53), 3)
+```
+
+## R特殊資料型態 | factor
+* 可用於名目尺度
+* 在Console上輸入下面敘述，並且查看運算結果
+```{r}
+gender_data <- c(1, 2, 2, 1, 1)
+gender <- factor(gender_data, labels=c("女", "男"))
+```
+
+## R特殊資料型態 | factor
+* 調整其順序
+```{r}
+gender <- factor(gender_data, labels=c("女", "男"), levels=c(2, 1))
+```
+
+## R特殊資料型態 | matrix
+* 2維度的vector
+* 在Console上輸入下面敘述
+```{r}
+intColMatrix <- matrix(1:12, nrow=4)
+intColMatrix
+intRowMatrix <- matrix(1:12, nrow=4, byrow=TRUE)
+intRowMatrix
+```
+* 在matrix裡，橫列稱為row，直行稱為col
+* matrix(data, nrow, ncol, byrow)：將data上的資料表示成nrow列或ncol行的matrix
+    + byrow=FALSE(預設值)，直行優先排列
+    + byrow=TRUE，橫列優先排列
+
+## R特殊資料型態 | matrix上的資料
+* 在Console上輸入下面敘述
+```{r}
+intRowMatrix[1,]
+intRowMatrix[,2]
+intRowMatrix[3,1]
+```
+
+## R特殊資料型態 | matrix上的運算
+* rowSums(x)：x的每一橫列上的元素總和
+* colSums(x)：x的每一直行上的元素總和
+* sum(x)：x上的元素總和
+* 在Console上輸入下面敘述
+```{r}
+rowSums(intRowMatrix)
+colSums(intRowMatrix)
+sum(intRowMatrix)
+```
+
+## R特殊資料型態 | matrix上的運算
+* t(x)：轉置x，原先的行做為列，列做為行
+* 在Console上輸入下面敘述
+```{r}
+t(intRowMatrix)
+```
+
+## R特殊資料型態 | matrix上的運算
+* diag(x)：x的對角線
+* 在Console上輸入下面敘述
+```{r}
+diag(intRowMatrix)
+```
+
+## R特殊資料型態 | array
+* 多維度的vector
+* array(x, dim)：將x表示成array，以dim的資料為array的維度
+   + dim為一個vector
+   + dim的長度表示array的維度數目，例如array為三維，dim上便有3個integer
+* 在Console上輸入下面敘述
+```{r}
+vec <- rep(c(1,3,5), 10)
+intArray <- array(vec, c(5, 3, 2))
+intArray
+```
+
+## R特殊資料型態 | array上的資料
+* 在Console上輸入下面敘述
+```{r}
+intArray[1, 3, 1]
+```
+
+## R特殊資料型態 | list
+* 可以包含不同資料型態的一序列資料
+* 在Console上輸入下面敘述
+```{r}
+spiderman <- list(id = "012",
+                  name = "Peter",
+                  team = "Avengers",
+                  height = 178,
+                  weight = 76)
+spiderman
+```
+
+## R特殊資料型態 | 取得list上的資料
+* 根據資料在list上的位置
+* 在Console上輸入下面敘述
+```{r}
+spiderman[[3]]
+```
+
+## R特殊資料型態 | 取得list上的資料
+* 根據資料在list上的名稱
+* 在Console上輸入下面敘述
+```{r}
+spiderman[["team"]]
+spiderman$team
+```
+
+## R特殊資料型態 | data frame
+* 可以包含不同資料型態的資料集合
+* 在Console上輸入下面敘述
+```{r}
+id <- c("001", "002", "003", "004", "005")
+name <- c("superman", "batman", "spiderman", "wolverine", "wonderwoman")
+height <- c(190, 188, 178, 150, 183)
+weight <- c(102, 95, 76, 88, 59)
+gender <- c("Male", "Male", "Male", "Male", "Female")
+heroes <- data.frame(id, name, height, weight, gender)
+heroes
+```
+* data.frame為2個維度的資料型態
+* 橫列為row，可以視為紀錄
+* 直行為column，可以視為資料欄位
+
+## R特殊資料型態 | data frame上的資料欄位名稱
+* 在Console上輸入下面敘述
+```{r}
+colnames(heroes)
+```
+
+## R特殊資料型態 | data frame的資料數量
+* 在Console上輸入下面敘述
+```{r}
+nrow(heroes)
+ncol(heroes)
+dim(heroes)
+```
+
+## R特殊資料型態 | data frame上各欄位的資料型態
+```{r}
+str(heroes)
+```
+* 比較id, name及gender等欄位的資料型態
+```{r}
+str(id)
+str(name)
+str(gender)
+```
+* 從上面，可以發現產生data frame的過程中，字串(character)自動被轉換成factor
+
+## R特殊資料型態 | 在data frame中保持字串資料類型
+```{r eval = FALSE}
+heroes <- data.frame(id, name, height, weight, gender,
+                     stringsAsFactors = FALSE)
+str(heroes)
+```
+* stringsAsFacotrs=FALSE(設定在data frame中保持字串資料類型)
+
+## R特殊資料型態 | 取得data frame上的資料
+* 根據data frame上的位置(第幾列、第幾行)
+* 在Console上輸入下面敘述
+```{r}
+heroes[2, ]
+heroes[,2]
+heroes[2, 2]
+```
+
+## R特殊資料型態 | 取得data frame上的欄位資料
+* 根據data frame上的名稱
+* 在Console上輸入下面敘述
+```{r}
+heroes[["name"]]
+heroes$name
+```
+
+## R特殊資料型態 | 取得data frame上的紀錄資料
+* 根據索引(data frame上符合索引條件的紀錄)
+* 在Console上輸入下面敘述
+```{r}
+heroes[heroes$name=="spiderman",]
+```
+* 在Console上輸入下面敘述，查看索引
+```{r}
+heroes$name=="spiderman"
+```
+
+## 練習
+* 取得性別為女性的超級英雄
+* 取得身高高於180cm的超級英雄
+
+## R特殊資料型態 | 取得data frame上的資料
+* 根據索引(data frame上符合索引條件的紀錄)
+* 在Console上輸入下面敘述
+```{r}
+heroes[which.max(heroes$height),]
+```
+* 在Console上輸入下面敘述，查看索引
+```{r}
+which.max(heroes$height)
+```
+* which.max(x)：傳回x中最大值的位置
+
+## 練習
+* 取得體重最重的超級英雄
+* 取得體重最輕的超級英雄
+
+## 小結
+* R語言中很重要的是使用函數來幫忙完成工作
+* 在本次課程中，列舉出許多常用的函數
+* 但還有更多的函數
+* 面對這些函數，死背下來不是最好的方法
+* 需要學習如何查找到適合的函數是學習R語言的訣竅
+
+## 小結
+* 在R語言的程式設計當中，vector與data frame是相當重要的資料型態
+* 許多分析與計算都在vector或data frame上完成
+* 下一節將主要著重在data frame為主的資料讀取與儲存

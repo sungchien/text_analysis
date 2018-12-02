@@ -1,0 +1,493 @@
+---
+title: "未知詞處理"
+author: "Sung-Chien Lin"
+date: "2018年9月25日"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=FALSE)
+```
+
+# 課程簡介
+
+## 課程內容
+* 處理中文文本中的未知詞與了解中文詞的特性
+
+## 未知詞
+* 大多數的時候中文處理需要先經過斷詞，斷詞的結果取決於好的詞典
+* 斷詞系統無法確認詞典沒有收錄的詞，這些詞稱為未知詞(unknown words)
+* 每個領域都有這個領域專屬的詞，詞典無法收錄所有可能出現的詞
+
+## 未知詞偵測
+* 利用經驗法則偵測資料內的未知詞
+    + 字串出現次數
+    + 字串的左右複雜度
+* 將偵測的未知詞加入詞典
+
+## NGram相連詞模型
+* 文本中接連出現的N個詞
+* 相連的兩個詞稱為Bigram，三個詞稱為Trigram
+* 本次課程利用NGram找出文本中所有接連出現的N個詞
+    + 計算候選詞語出現次數
+    + 以(N+1)Gram估計NGram的左右複雜度，判斷NGram是否可能是詞語
+
+## 本次課程需先安裝套件
+* 請在Console上輸入
+```{r}
+install.packages("tidytext")
+```
+
+# 本次課程程式
+```{r}
+setwd("rCourse/08")
+
+library(tidyverse)
+library(jiebaR)
+library(tidytext)
+
+news <- data.frame()
+
+# 讀入要處理的新聞資料
+for (i in 1:15) {
+  date <- sprintf("2018_09_%02d", i)
+  
+  news.df <- read.csv(file=paste0("udn_", date,".csv"),
+                      fileEncoding="UTF-8", stringsAsFactors=FALSE)
+  news <- rbind(news, news.df) #將讀入的新聞資料與原先的資料合併
+}
+
+# 設定斷詞系統
+mp.seg <- worker(type="mp", symbol=TRUE)
+
+# 進行斷詞
+news <- news %>%
+  filter(!is.na(text)) %>%  # 過濾空的新聞資料
+  mutate(id=row_number()) %>%
+  rowwise() %>%
+  mutate(text.sg=paste0(segment(paste(title, text, sep="。"), mp.seg), collapse=" ")) %>%
+  ungroup()
+
+###################
+# 統計輸入的文本內每一個可能的NGram出現的次數，計算候選詞語出現的次數與左右複雜度
+NGramGenerator <- function(df, n) {
+  # df為輸入之文本, n是NGram的N
+  this_ngram <- df %>%
+    select(id, text.sg) %>%
+    unnest_tokens(ngram, text.sg, token="ngrams", n=n) %>% # 利用tidytext套件提供的功能從文本產生NGram
+    count(ngram, sort=TRUE) %>% # 統計每一個NGram出現次數
+    rename(c=n)
+
+  return(this_ngram)
+}
+
+###########
+# 根據頻率及字串的樣式(pattern)判斷是否為可能的候選詞語
+CandidateSelector <- function(charstr, n) {
+  # charstr為可能的候選詞(即NGram)，n為NGram的N
+  count.th <- 20
+  
+  lstr <- "^\\p{L}+"  # 全部為數字或文字組成的字串，若不是這種字串便需要排除
+  estr <- "^[a-zA-Z]+" # 全部由英文字母組成的字串，須排除
+  for (i in 1:(n-1)) {
+    lstr <- paste0(lstr, "\\s\\p{L}+")
+    estr <- paste0(estr, "\\s[a-zA-Z]+")
+  }
+  lstr <- paste0(lstr, "$")
+  estr <- paste0(estr, "$")
+  
+  stopwords <- c("的", "在", "是", "都", "了", "也", "很", "會", "有", "呢", "嗎", "就", "但", "所", "我", "不", "到", "要", "於")
+  
+  charstr <- charstr %>%
+    filter(c>count.th) %>% # 取出總頻次大於count.th的Ngram
+    filter(grepl(lstr, ngram, perl=TRUE)) %>% #保留內容為數字和文字的NGram(也就是去除包含符號的NGram)
+    filter(!grepl(estr, ngram, perl=TRUE)) %>% # 排除全英文字母的Trigram
+    filter(!(substr(ngram, 1, 1) %in% stopwords)) %>% # 去除第一字為停用字的NGram
+    filter(!(substr(ngram, nchar(ngram), nchar(ngram)) %in% stopwords)) # 去除最後一字為停用字的NGram
+  
+  return(charstr)
+}
+
+########
+# 取出NGram前面的(N-1)個相連詞
+headString <- function (ngram, n) {
+  sapply(ngram, function (x, n) {
+    last_space = gregexpr(" ", x)[[1]][n-1]
+    return(substr(x, 1, last_space-1))
+  }, n)
+}
+
+# 取出NGram後面的(N-1)個相連詞
+tailString <- function (ngram) {
+  sapply(ngram, function (x) {
+    first_space = gregexpr(" ", x)[[1]][1]
+    return(substr(x, first_space+1, nchar(x)))
+  })
+}
+
+# 依據左右複雜度判斷是否為可能的候選詞語，複雜度太小比較不可能是詞語
+LRJointEstimator <- function(this_ngram, nextone, n) {
+  # this_ngram目前處理的NGram，nextone為(N+1)Gram，n為NGram的N
+  complex.th <- 1
+  
+  # 計算右接的複雜度
+  ngram_at_head <- nextone %>%
+    mutate(headstr=as.character(headString(ngram, n+1))) %>% # 找出所有(N+1)Gram的前N個相連詞
+    inner_join(this_ngram, by=c("headstr"="ngram")) %>% # 比對(N+1)Gram的前N個相連詞與要判斷的NGram
+    group_by(headstr) %>% # 利用熵(entropy)公式計算右接複雜度
+    mutate(ratio=c.x/sum(c.x)) %>%
+    mutate(ent=-log(ratio)*ratio) %>%
+    summarise(rjoint=sum(ent))
+  
+  # 計算左接的複雜度
+  ngram_at_tail <- nextone %>%
+    mutate(tailstr=as.character(tailString(ngram))) %>% # 找出所有(N+1)Gram的後N個相連詞
+    inner_join(this_ngram, by=c("tailstr"="ngram")) %>% # 比對(N+1)Gram的後N個相連詞與要判斷的NGram
+    group_by(tailstr) %>% # 利用熵(entropy)公式計算左接複雜度
+    mutate(ratio=c.x/sum(c.x)) %>%
+    mutate(ent=-log(ratio)*ratio) %>%
+    summarise(ljoint=sum(ent))
+  
+  this_ngram <- this_ngram %>%
+    left_join(ngram_at_head, by=c("ngram"="headstr")) %>% # 加上右接複雜度
+    left_join(ngram_at_tail, by=c("ngram"="tailstr")) %>% # 加上左接複雜度
+    filter(ljoint>=complex.th) %>% # 過濾左右複雜度大小的字串
+    filter(rjoint>=complex.th)
+  
+  return(this_ngram)
+}
+####
+
+bigram <- NGramGenerator(news, 2) # 產生文本中所有Bigram及其出現次數
+
+##
+bigram <- CandidateSelector(bigram, 2) # 根據出現次數及字串的樣式(pattern)判斷Bigram是否為可能的候選詞語
+
+trigram <- NGramGenerator(news, 3) # 產生文本中所有Trigram及其出現次數
+
+bigram <- LRJointEstimator(bigram, trigram, 2) # 依據左右複雜度判斷Bigram是否為可能的候選詞語
+
+##
+trigram <- CandidateSelector(trigram, 3) # 根據出現次數及字串的樣式(pattern)判斷Trigram是否為可能的候選詞語
+
+fourgram <- NGramGenerator(news, 4) # 產生文本中所有Fourgram及其出現次數
+
+trigram <- LRJointEstimator(trigram, fourgram, 3) # 依據左右複雜度判斷Trigram是否為可能的候選詞語
+
+##
+fourgram <- CandidateSelector(fourgram, 4) # 根據出現次數及字串的樣式(pattern)判斷Fourgram是否為可能的候選詞語
+
+fivegram <- NGramGenerator(news, 5) # 產生文本中所有Fivegram及其出現次數
+
+fourgram <- LRJointEstimator(fourgram, fivegram, 4) # 依據左右複雜度判斷Fourgram是否為可能的候選詞語
+
+#################
+# 合併所有候選詞語篩選結果
+dict <- data.frame() %>%
+  bind_rows(bigram) %>%
+  bind_rows(trigram) %>%
+  bind_rows(fourgram) %>%
+  select(ngram)
+
+## 去除字串中的空白
+dict$ngram <- gsub("\\s", "", dict$ngram, perl=TRUE)
+
+## 寫入檔案
+write.table(dict, file="udn_2018_09.dict", quote=FALSE,
+            row.names=FALSE, col.names=FALSE, fileEncoding="UTF-8",
+            append=TRUE)
+```
+
+# 載入套件
+
+## 準備工作目錄與檔案
+* 在rCourse下，建立工作目錄09
+* 將08的2018年三月新聞資料的所有檔案複製到09下
+
+## 設定工作目錄
+* 首先開啟新的Script
+* 在Script上，設定工作目錄
+```{r}
+setwd("rCourse/08")
+```
+
+## 載入此次課程所需套件
+* 在Script上輸入
+```{r}
+library(tidyverse)
+library(jiebaR)
+library(tidytext)
+```
+
+# 讀入文字資料並進行斷詞
+## 讀入聯合報三月要聞新聞資料
+* rbind()：以row的方式，合併兩個data frame
+* 在Script上輸入
+```{r}
+news <- data.frame()
+
+for (i in 1:15) {
+  date <- sprintf("2018_09_%02d", i)
+
+  news.df <- read.csv(file=paste0("udn_", date,".csv"),
+                      fileEncoding="UTF-8", stringsAsFactors=FALSE)
+  news <- rbind(news, news.df) #將讀入的新聞資料與原先的資料合併
+}
+```
+
+## 設定jieba斷詞器
+* 斷詞器的參數
+    + type="mp"使用最長比對法，不會產生詞典中沒有的詞
+    + symbol=TRUE輸出符號
+* 在Script上輸入
+```{r}
+mp.seg <- worker(type="mp", symbol=TRUE)
+```
+
+## 將文字資料斷詞
+* 在Script上輸入
+```{r}
+news <- news %>%
+  filter(!is.na(text)) %>%  # 過濾空的新聞資料
+  mutate(id=row_number()) %>%
+  rowwise() %>%
+  mutate(text.sg=paste0(segment(paste(title, text, sep="。"), mp.seg), collapse=" ")) %>% #詞語之間加入空白間隔，提供NGram Tokenizer處理
+  ungroup()
+```
+* 請在Console輸入View(news)，檢視文字資料與斷詞結果
+* 在新聞中的許多詞語因為沒有收錄在詞典，無法斷出，稱為未知詞(unknown words)
+
+# 產生NGram
+## BiGram (詞雙連)
+* unnest_tokens將欄位資料拆解成tokens，然後進行unnest
+    + token=ngram_tokens：利用ngram_tokens做為tokenizer
+    + tokenizer：將輸入的字串拆解成較小的字串
+    + unnest_tokens：將拆解開的tokens展開成觀測值
+* 在data frame bigram內，ngram為詞雙連
+* c為該詞雙連的出現總頻次
+* 在Script上輸入
+```{r}
+bigram <- news %>%
+  select(id, text.sg) %>%
+  unnest_tokens(ngram, text.sg, token="ngrams", n=2) %>% # 利用斷詞的結果，找出所有的ngram (目前n=2，也就是Bigram)
+  count(ngram, sort=TRUE) %>% # 統計ngram次數
+  rename(c=n)
+```
+
+## TriGram (詞三連)
+* 在data frame trigram內，ngram為詞三連
+* n為該詞三連的出現總頻次
+* 利用trigram估計bigram的左右複雜度
+* trigram也可以做為接下來判斷是否為詞語的候選字串
+```{r}
+trigram <- news %>%
+  select(id, text.sg) %>%
+  unnest_tokens(ngram, text.sg, token="ngrams", n=3) %>%
+  count(ngram, sort=TRUE) %>%
+  rename(c=n)
+```
+
+## 將產生NGram的部分寫成函數的形式
+* df為輸入的文本
+* n是NGram的N
+```{r}
+NGramGenerator <- function(df, n) {
+  this_ngram <- df %>%
+    select(id, text.sg) %>%
+    unnest_tokens(ngram, text.sg, token=ngram_tokens, n=n) %>%
+    count(ngram, sort=TRUE) %>%
+    rename(c=n)
+  
+  return(this_ngram)
+}
+```
+
+# 利用出現次數、文字形式、停用詞等選擇可能的候選詞語
+## 取出出現總次數大於count.th的BiGram
+* 在Script上輸入
+```{r}
+count.th <- 20
+
+bigram <- bigram %>%
+  filter(c>count.th)
+```
+
+## 取出內容為文字(去除內容中包含符號)的BiGram
+* 在Script上輸入
+* "^\\p{L}+\\s\\p{L}+$"
+    + ^字串開頭
+    + \\p{L}文字或數字(不包含符號)
+    + \\p{L}+一個或以上的文字或數字
+    + \\s空白
+    + $字串結尾
+```{r}
+bigram <- bigram %>%
+  filter(grepl("^\\p{L}+\\s\\p{L}+$", ngram, perl=TRUE))
+```
+
+## 排除全英文字母的Bigram
+* 在Script上輸入
+* "^[a-zA-Z]+\\s[a-zA-Z]+$"
+    + [a-zA-Z]英文字母
+```{r}
+bigram <- bigram %>%
+  filter(!grepl("^[a-zA-Z]+\\s[a-zA-Z]+$", ngram, perl=TRUE))
+```
+
+## 去除第一字或最後一字為停用詞的BiGram
+* 在Script上輸入
+```{r}
+stopwords <- c("的", "在", "是", "都", "了", "也", "很", "會", "有", "呢", "嗎", "就", "但", "所", "我", "不", "到", "要", "於")
+
+bigram <- bigram %>%
+  filter(!(substr(ngram, 1, 1) %in% stopwords)) %>%
+  filter(!(substr(ngram, nchar(ngram), nchar(ngram)) %in% stopwords))
+```
+
+## 練習
+* 將上述有關bigram篩選經驗法則的程式敘述利用pipe(%>%)串接起來
+
+## 將上述篩選經驗法則寫成函數的形式
+```{r}
+CandidateSelector <- function(this_ngram, n) {
+  count.th <- 20
+  
+  lstr <- "^\\p{L}+"
+  estr <- "^[a-zA-Z]+"
+  for (i in 1:(n-1)) {
+    lstr <- paste0(lstr, "\\s\\p{L}+")
+    estr <- paste0(estr, "\\s[a-zA-Z]+")
+  }
+  lstr <- paste0(lstr, "$")
+  estr <- paste0(estr, "$")
+  
+  stopwords <- c("的", "在", "是", "都", "了", "也", "很", "會", "有", "呢", "嗎", "就", "但", "所", "我", "不", "到", "要", "於")
+
+  this_ngram <- this_ngram %>%
+    filter(c>count.th) %>% # 取出總頻次大於count.th的Ngram
+    filter(grepl(lstr, ngram, perl=TRUE)) %>% #取出內容為文字(去除包含其中包含符)號的TriGram
+    filter(!grepl(estr, ngram, perl=TRUE)) %>% # 排除全英文字母的Trigram
+    filter(!(substr(ngram, 1, 1) %in% stopwords)) %>% # 去除第一字為停用字的TriGram
+    filter(!(substr(ngram, nchar(ngram), nchar(ngram)) %in% stopwords)) # 去除最後一字為停用字的TriGram
+  
+  return(this_ngram)
+}
+```
+
+# 利用左右複雜度判斷詞語間隔
+## 從(N+1)Gram中取出前面的N個詞語
+* 找出最後一個空白，last_space是這個空白的位置
+* 從字串中取出第1個字到最後一個空白前一個字之間的部分字串
+```{r}
+headString <- function (ngram, n) {
+  sapply(ngram, function (x, n) {
+    last_space = gregexpr(" ", x)[[1]][n-1]
+    return(substr(x, 1, last_space-1))
+  }, n)
+}
+```
+
+## 從(N+1)Gram中取出後面的N個詞語
+* 找出第一個空白，first_space是這個空白的位置
+* 從字串中取出第一個空白後一個字到最後一個字之間的部分字串
+```{r}
+tailString <- function (ngram) {
+  sapply(ngram, function (x) {
+    first_space = gregexpr(" ", x)[[1]][1]
+    return(substr(x, first_space+1, nchar(x)))
+  })
+}
+```
+
+## 利用左右複雜度評估候選字串是否為詞語的可能性
+* 如果候選字串是一個詞語，其左右便是另外的詞語字串
+* 詞語的左右能夠接的字串種類相當多，而且很難事先預測
+* 反之，如果候選字串的左或右字串，種類相當少而容易預測，便可能不是一個詞
+    + 例如：「書館」的左邊，通常會是什麼呢？
+    + 又如：「立法委」的右邊，通常又會是什麼呢？
+* 因此，我們可以利用左右複雜度評估候選字串是否為詞語的可能性
+    + 候選字串的左右複雜度都很大時便可能是一個詞語
+
+## 利用Shannon Entropy的概念計算字串的左右複雜度
+* entropy = -sum(log(p)*p)
+* p： 事件的頻率(在此為字串左邊出現某一字串的頻率)
+* entropy愈大，該字串可能的左接字串愈複雜
+    + 左接字串的種類愈多
+    + 分布在各左接字串愈平均(愈難預測是哪一個字串)
+* 同理，可用於右接字串的評估
+
+## 利用Shannon Entropy的概念計算字串的左接複雜度
+```{r}
+bigram_at_tail <- trigram %>%
+  mutate(tailstr=as.character(tailString(ngram))) %>% #找出所有Trigram中後面兩個詞語
+  inner_join(bigram, by=c("tailstr"="ngram")) %>% #與Bigram中的候選詞語比對
+  group_by(tailstr) %>%  #進行Entropy計算，做為左接複雜度
+  mutate(ratio=c.x/sum(c.x)) %>%
+  mutate(ent=-log(ratio)*ratio) %>%
+  summarise(ljoint=sum(ent))
+```
+
+## 利用Shannon Entropy的概念計算字串的右接複雜度
+```{r}
+bigram_at_head <- trigram %>%
+  mutate(headstr=as.character(headString(ngram, 3))) %>% #找出所有Trigram中前面兩個詞語
+  inner_join(bigram, by=c("headstr"="ngram")) %>% #與Bigram中的候選詞語比對
+  group_by(headstr) %>%   #進行Entropy計算，做為右接複雜度
+  mutate(ratio=c.x/sum(c.x)) %>%
+  mutate(ent=-log(ratio)*ratio) %>%
+  summarise(rjoint=sum(ent))
+```
+
+## 將bigram上的候選字串加上左右複雜度
+```{r}
+bigram <- bigram %>%
+  left_join(bigram_at_head, by=c("ngram"="headstr")) %>%
+  left_join(bigram_at_tail, by=c("ngram"="tailstr"))
+```
+
+## 刪除左右複雜度小於complex.th的字串
+```{r}
+complex.th <- 1
+
+bigram <- bigram %>%
+  filter(ljoint>=complex.th) %>%
+  filter(rjoint>=complex.th)
+```
+
+## 將左右複雜度的過濾經驗法則寫成函數的形式
+```{r}
+LRJointEstimator <- function(this_ngram, nextone, n) {
+  complex.th <- 1
+  
+  ngram_at_head <- nextone %>%
+    mutate(headstr=as.character(headString(ngram, n+1))) %>%
+    inner_join(this_ngram, by=c("headstr"="ngram")) %>%
+    group_by(headstr) %>%
+    mutate(ratio=c.x/sum(c.x)) %>%
+    mutate(ent=-log(ratio)*ratio) %>%
+    summarise(rjoint=sum(ent))
+
+  ngram_at_tail <- nextone %>%
+    mutate(tailstr=as.character(tailString(ngram))) %>%
+    inner_join(this_ngram, by=c("tailstr"="ngram")) %>%
+    group_by(tailstr) %>%
+    mutate(ratio=c.x/sum(c.x)) %>%
+    mutate(ent=-log(ratio)*ratio) %>%
+    summarise(ljoint=sum(ent))
+
+  this_ngram <- this_ngram %>%
+    left_join(ngram_at_head, by=c("ngram"="headstr")) %>%
+    left_join(ngram_at_tail, by=c("ngram"="tailstr")) %>%
+    filter(ljoint>=complex.th) %>%
+    filter(rjoint>=complex.th)
+  
+  return(this_ngram)
+}
+```
+
+# 本次課程小結
+
+## 小結
+* 從文本發現未知詞是重複性很高的工作
+* 可設法利用迴圈與函數等程式設計完成這些工作

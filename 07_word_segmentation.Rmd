@@ -1,0 +1,466 @@
+---
+title: "中文斷詞與詞語統計"
+author: "Sung-Chien Lin"
+date: "2018年9月20日"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# 課程簡介
+
+## 課程內容
+- 以聯合報歷史新聞的生活新聞為例
+- 利用jiebaR套件進行中文斷詞
+- 進行簡單的文件分析與視覺化
+   + 根據出現次數與出現的文件數判斷重要的詞語
+   + 以長條圖與文字雲進行視覺化
+
+## 斷詞
+- 詞是語言最小的意義單位
+- 自然語言處理通常以詞語為處理單位
+- 中文句子的詞語之間沒有明顯界限
+- 進行中文自然語言處理前需要先斷詞
+
+## jiebaR套件
+* CRAN中的一個中文斷詞套件
+* 可將輸入的中文字串(character)，斷詞成為一組詞的向量
+* 第一次使用套件前，需要安裝
+    + 在Console上輸入
+```{r}
+install.packages("jiebaR")
+```
+
+## 判斷詞語的重要性
+* 詞語出現次數愈多愈重要？
+* 描述詞語出現次數與其排名次序之間的關係：Zipf's Law
+* 在多數文件上都會出現的詞語並不重要
+
+## 斷詞結果的視覺化
+* 可以利用長條圖比較詞語的重要性與排序
+* 一般常用文字雲(word cloud)快速瀏覽文件中的重要詞語
+
+## wordcloud套件
+* 文字雲套件
+* 可將輸入的一組文字與其在圖形上的大小，畫出文字雲
+* 第一次使用套件前，需要安裝
+    + 在Console上輸入
+```{r}
+install.packages("wordcloud")
+```
+    
+## 文字資料處理常用的單位
+* 字：書寫的基本單位。
+* 詞：多個文字所組成、具有意義的單位。
+* 句子：一組連續的詞構成的序列。
+* 文件：由多個句子構成的組織。
+* 文件集合：文件所成的集合，有時會用語料庫。
+
+## 文字資料處理常用的分析格式
+* 文件-詞語矩陣(document-term matrix, dtm)
+* 將文件集合的各文件視為紀錄，表示為矩陣的rows
+* 將出現在文件集合內的詞語視為各文件紀錄的屬性，表示為矩陣的columns
+* 矩陣上的值為各文件分配在各詞語上的重要性(以row來看)，各詞語在各文件上的重要性(以column來看)
+
+# 載入套件與讀取資料
+
+## 準備工作目錄與檔案
+* 在rCourse下，建立工作目錄07
+* 將06的生活新聞資料檔案複製到07下
+
+## 設定工作目錄
+* 首先開啟新的Script
+* 在Script上，設定工作目錄
+```{r}
+setwd("rCourse/07")
+```
+
+## 載入tidyverse套件
+* 在Script上輸入
+```{r}
+library(tidyverse)
+```
+
+## 載入jiebaR套件
+* 在Script上輸入
+```{r}
+library(jiebaR)
+```
+
+## 載入wordcloud套件
+* 在Script上輸入
+```{r}
+library(wordcloud)
+```
+
+## 讀取生活新聞csv檔案
+* 在Script上輸入
+```{r}
+tdf <- data.frame()
+
+for (i in 1:15) {
+  file <- sprintf("udn_2018_09_%02d.csv", i)
+  df <- read.csv(file, fileEncoding="UTF-8", stringsAsFactors = FALSE)
+  df$date <- sprintf("2018/09/%02d", i)
+  tdf <- rbind(tdf, df)
+}
+```
+
+## 為便利處理將每則新聞進行編號(id)
+* row_number()依照紀錄順序產生流水編號
+   + 在本次課程，將每則新聞內容視為一筆文件，其中可能包含一到多個句子。
+```{r}
+tdf <- tdf %>%
+  mutate(id = row_number())
+```
+
+## 查看最短的10則新聞內容與長度
+```{r}
+tdf %>%
+  mutate(msg.len=nchar(text)) %>% #計算新聞長度
+  arrange(msg.len) %>% #依照新聞長度進行排序
+  slice(1:10) %>% #選出最短的10則新聞
+  select(msg.len)
+```
+
+# 對新聞息內容進行斷詞
+
+## 設定斷詞器模式
+* 使用jiebaR斷詞，需要先設定斷詞器模式
+* jiebaR斷詞器為worker()
+* type="mix"：選擇混合(mix)模式(預設)
+* symbol=TRUE：設定輸出標點符號及特殊符號
+* bylines=TRUE：設定逐一紀錄進行斷詞
+```{r}
+word.seg <- worker(type="mix", symbol=TRUE, bylines=TRUE)
+```
+
+## 對新聞中的文句進行斷詞
+* segment(text, word.seg)：以word.seg設定的斷詞器，對title與text上的文字進行斷詞
+    + paste(title, text, sep="。")：將title與text連接起來，中間以"。"間隔
+* word欄位中的資料為vector形式的斷詞結果
+```{r}
+ws <- tdf %>%
+  mutate(word=segment(paste(title, text, sep="。"), word.seg))
+```
+
+## 選取編號(id)及訊息斷詞產生的詞語(word)
+* 每一筆記錄：每一則新聞(文件)以及它上面的詞語
+```{r}
+ws <- ws %>%
+  select(id, word)
+```
+
+## 將斷詞產生的詞語，設為觀察值，展開data frame
+* unnest(ws, word)將ws的word欄位中的每一個詞展開
+* 每一筆記錄：一則新聞以及一個出現在這則新聞上的詞語
+```{r}
+ws <- ws %>%
+  unnest(word)
+```
+
+## 利用Regular expresseion篩選出中文詞語
+* grepl：第一個參數表達的Regular expression是否出現在第二個參數內
+* 中文字的 Regular expression：\\\\p{Han}
+* 至少出現一個中文字的Regular expression (\\\\p{Han})+
+```{r}
+ws <- ws %>%
+  filter(grepl("(\\p{Han})+", word, perl=TRUE))
+```
+
+## 練習：將上述處理的過程運用pipe(%>%)寫成一個段落
+
+# 新聞的詞語分析
+## 依據詞語出現的重要性
+* 每個詞語出現的次數與頻率
+* 詞語排序與出現頻率的關係 (Zipf's Law)
+* 新聞中出現頻率最高的詞語
+
+## 每個詞語出現的次數與頻率
+* 統計新聞中每個詞語出現的總次數
+* 計算每個詞語的出現頻率(詞語出現次數/所有詞語出現次數總和)
+* 根據出現次數畫成直方圖(histogram)
+
+## 統計新聞中每個詞語出現的總次數
+```{r}
+word.df <- ws %>%
+  count(word, sort=TRUE) #統計詞語在新聞中的出現總次數，並依據次數高低排序
+```
+* word.df：詞語以及其在文件集合中的出現總次數
+
+## 計算每個詞語的出現頻率
+* 對所有詞語出現次數進行總和，此即所有新聞上所有詞語的次數總和
+* 某一詞語的頻率定義為詞語出現次數除以所有詞語的次數總和
+```{r}
+word.df <- word.df %>%
+  mutate(frequency=n/sum(n)) #計算詞語出現頻率
+```
+
+## 將詞語出現次數的分布情形化成直方圖
+* 將直方圖的組界寬度(bin width)設為100
+```{r}
+word.df %>%
+  ggplot(aes(n)) +
+  geom_histogram(binwidth=100) +
+  labs(x="出現次數", y="詞語數")
+```
+* 絕大多數的詞語出現次數小於100次
+
+## 詞語排序與出現頻率的關係|Zipf's Law
+* 請參考[維基百科上有關Zipf's Law的說明](https://zh.wikipedia.org/wiki/%E9%BD%8A%E5%A4%AB%E5%AE%9A%E5%BE%8B)
+* 絕大多數的詞語僅出現很少的次數
+* 出現次數較多的詞語只佔有相當少數
+
+## 詞語排序與出現頻率的關係
+* 根據出現頻率，將詞語由大到小設定順序
+* 將詞語排序與出現頻率的關係畫成折線圖
+* 劃出輔助線，驗證詞語出現的頻率與其排序成反比
+
+## 根據出現頻率，將詞語由大到小設定順序
+```{r}
+word.df <- word.df %>%
+  arrange(desc(frequency)) %>% #由大到小排定順序
+  mutate(rank=row_number()) #依照紀錄順序設定流水編號
+```
+
+## 將詞語排序與出現頻率的關係畫成折線圖
+* aes(x=rank, y=frequency)
+    +  以詞語的排序為x軸座標
+    +  以詞語的出現頻率為y軸座標
+```{r}
+word.df %>%
+  ggplot(aes(x=rank, y=frequency)) +
+  geom_line()
+```
+* 只有極少數的詞語有較高出現頻率，絕大多數詞語的出現頻率都很低(很多詞語只出現一次)
+
+##將x軸與y軸改為對數
+* scale_x_log10()與scale_y_log10()
+```{r}
+word.df %>%
+  ggplot(aes(x=rank, y=frequency)) +
+  geom_line() +
+  scale_x_log10(breaks=c(1, 10, 100, 1000)) +
+  scale_y_log10(breaks=seq(0, 0.1, 0.01))
+```
+* 中央有部分很接近直線
+* Zipf's Law
+
+## 在圖形上加入預測線，以線性迴歸的方式計算預測線的截距與斜率
+* 選出圖形中接近直線的一段
+* 利用線性模型估計可能的直線lm(y ~ x)
+    + 以x預測y，y=ax+b
+    + 在此，x是log10(rank)，y是log10(frequency)
+    + 計算直線的a(斜率, slope)與b(截距, intercept)
+```{r}
+rank_subset <- word.df %>%
+  filter(rank>10, rank<1000)
+
+lm(log10(frequency) ~ log10(rank), data = rank_subset)
+```
+
+## 加上預測線
+* 利用上面得到的斜率與截距在圖形上畫出預測線
+* geom_abline(intercept, slope, color, linetype)在圖形上畫出截距為intercept、斜率為slope的直線
+    + 設定預測線的顏色為gray50，形狀為線段虛線
+```{r}
+word.df %>%
+  ggplot(aes(x=rank, y=frequency)) +
+  geom_abline(intercept = -1.57, slope = -0.74, color = "gray50", linetype = 2) +
+  geom_line() + 
+  scale_x_log10(breaks=c(1, 10, 100, 1000)) +
+  scale_y_log10(breaks=seq(0, 0.1, 0.005))
+```
+
+## 加上標題
+```{r}
+word.df %>%
+  ggplot(aes(x=rank, y=frequency)) +
+  geom_abline(intercept = -1.26, slope = -0.84, color = "gray50", linetype = 2) +
+  geom_line() + 
+  scale_x_log10(breaks=c(1, 10, 100, 1000)) +
+  scale_y_log10(breaks=seq(0, 0.1, 0.005)) +
+  labs(x="將詞語依照出現次數大小的排序", y="出現頻率")
+```
+
+## 新聞中出現頻率最高的詞語
+* top_n(word.df, 20, frequency)：選出出現頻率最高的20個詞語
+* 將其出現頻率畫成長條圖
+    + aes(x=word, y=frequency)：20個詞語為x軸(以詞語的字碼順序排序)，其出現頻率為y軸
+```{r}
+word.df %>%
+  top_n(20, frequency) %>% #取出前二十名
+  ggplot(aes(x=word, y=frequency)) +
+  geom_col(fill = alpha("purple", 0.7))
+```
+* 沒有按照出現頻率排序，不容易比較
+
+## 按照詞語的出現頻率排序
+* aes(x=reorder(word, frequency), y=frequency)
+    + 以frequency排序後的詞語做為x軸
+```{r}
+word.df %>%
+  top_n(20, frequency) %>% #取出前二十名
+  # 使長條圖按照將詞語的出現頻率排列
+  ggplot(aes(x=reorder(word, frequency), y=frequency)) +
+  geom_col(fill = alpha("purple", 0.7))
+```
+
+## 翻轉座標
+* coord_flip()將x軸與y軸翻轉
+```{r}
+word.df %>%
+  top_n(20, frequency) %>% #取出前二十名
+  # 使長條圖按照將詞語的出現頻率排列
+  ggplot(aes(x=reorder(word, frequency), y=frequency)) +
+  geom_col(fill = alpha("purple", 0.7)) +
+  coord_flip() #將詞語置於y軸，出現次數置於x軸
+```
+
+## 加上標題
+```{r}
+word.df %>%
+  top_n(20, frequency) %>% #取出前二十名
+  # 使長條圖按照將詞語的出現頻率排列
+  ggplot(aes(x=reorder(word, frequency), y=frequency)) +
+  geom_col(fill = alpha("purple", 0.7)) +
+  labs(title="依照出現次數排列的前二十個詞語", x="詞語", y="出現頻率") + # 加上標題
+  coord_flip() #將詞語置於y軸，出現次數置於x軸
+```
+
+## 以出現頻率決定詞語重要性的討論
+* 許多詞語都是不具意義的停用詞(stop words)
+* 這些詞語出現在許多新聞內
+
+# IDF | inverse document frequency
+
+## IDF
+* 出現在愈多訊息的詞語，愈不重要
+* 根據每個詞語出現的新聞數，判斷它們的重要性
+* 某個詞語的idf定義為log(D/di)：D是新聞總數，di是這個詞語出現的新聞數
+
+## 計算idf
+* mutate(total.doc=n_distinct(id))：計算新聞總數，也就是上文的D
+* group_by(word, total.doc)：對詞語進行分群
+    + 為了在未來計算中使用total.doc，所以保留在group_by內
+* summarise(doc.freq=n_distinct(id)):
+統計每個詞語出現的新聞數，即上文的di
+    + doc.freq=n_distinct(id)：詞語出現的新聞數
+* mutate(idf=log(total.doc/doc.freq))：計算idf
+* select(word, idf)：選擇詞語及其idf
+```{r}
+word.idf <- ws %>%
+  mutate(total.doc=n_distinct(id)) %>% #新聞總數
+  group_by(word, total.doc) %>% #依據每個詞語分群
+  summarise(doc.freq=n_distinct(id)) %>% #統計各詞語出現的新聞數
+  mutate(idf=log(total.doc/doc.freq)) %>%
+  select(word, idf)
+```
+
+# TF | Term frequency
+## 詞語在各則新聞的出現次數與頻率
+* group_by(id, word)：以訊息和詞語進行分群
+* summarise(count=n())：計算詞語在各則新聞中的出現次數
+* mutate(tf=count/sum(count))：以詞語出現次數除以新聞內所有詞語出現次數，計算詞語在新聞上的出現頻率
+```{r}
+word.msg <- ws %>%
+  group_by(id, word) %>%
+  summarise(count=n()) %>% #詞語在新聞中的出現次數
+  mutate(tf=count/sum(count)) %>% #詞語在每一則新聞內的頻率
+  ungroup()
+```
+* 每個詞語在各個文件(新聞)內的出現次數與頻率
+* 在這裡，word.msg便是一般在文字資料處理上常說的文件-詞語矩陣(document-term matrix, dtm)的long data format
+* 文件-詞語矩陣的圖示
+* word.msg的圖示
+
+# TF*IDF
+## 計算詞語在各則新聞的tf*idf值
+* 將各則新聞的詞語及其出現次數連結上idf
+* left_join(word.msg, word.idf, by=c("word"="word"))以word.msg為主，合併word.idf的欄位
+    + 合併的條件是兩個word資料必須相等
+```{r}
+word.msg <- word.msg %>%
+  left_join(word.idf, by=c("word"="word")) %>%
+  mutate(tfidf=tf*idf)
+```
+* 以圖表示left_join(word.msg, word.idf, by=c("word"="word"))
+
+## 畫出分布圖
+```{r}
+x_breaks = seq(0, max(word.msg$tfidf)+0.05, 0.05)
+
+word.msg %>%
+  ggplot(aes(tfidf)) +
+  geom_histogram(breaks=x_breaks) +
+  scale_x_continuous(breaks=x_breaks)
+```
+* 極大多數詞語的tfidf小於等於0.05
+
+## 捨棄各則新聞中的tfidf值過小的詞語
+```{r}
+word.msg <- word.msg %>%
+  filter(tfidf>0.05)
+```
+
+## 統計詞語在所有新聞上的tfidf總和
+```{r}
+word.scr <- word.msg %>%
+  group_by(word) %>%
+  summarise(sum.tfidf=sum(tfidf)) %>%
+  arrange(desc(sum.tfidf))
+```
+* word.src：詞語與其重要性(詞語在所有新聞上的tfidf總和)
+
+## 繪製所有新聞上的tfidf總和最高的前二十個詞語的長條圖
+```{r}
+word.scr %>%
+  slice(1:20) %>%
+  ggplot(aes(x=reorder(word, sum.tfidf), y=sum.tfidf)) +
+  geom_col(fill = alpha("purple", 0.7)) +
+  labs(title="TFIDF總和最大的前二十個詞語", x="詞語", y="TFIDF總和") +
+  coord_flip()
+```
+
+## 繪製所有新聞上的tfidf總和最高的前五十個詞語的文字雲
+* pal <- brewer.pal(8, "Dark2")：從"Dark2"顏色配置中挑選8種顏色
+* wordcloud 繪製文字雲
+    + 前兩個參數是詞語與其在圖形上的大小(詞語的重要程度)
+    + scale=c(3, 0.3)：第一個數值是最大的尺寸，第二個數值代表每一級字的差距
+    + random.order=FALSE：較重要的詞語不僅用較大的字體，而且按照詞語的重要程度繪製，較重要的詞語會在圖形中心
+    + random.color=TRUE：隨機選擇顏色
+    + rot.per=0：垂直方向的詞語比例為0
+    + colors：字體採用的顏色配置
+```{r}
+pal <- brewer.pal(8, "Dark2")
+wordcloud(word.scr$word[1:50], word.scr$sum.tfidf[1:50],
+          scale=c(4, 0.1), random.order=FALSE, random.color=TRUE,
+          rot.per=0, colors=pal)
+```
+
+# 本次課程小結
+
+## 小結
+* 中文文字資料在分析前需要先經過斷詞
+* 斷詞需要仰賴詞典，也就是預先編輯好的詞語集合
+* 即便詞典收錄的詞語再齊全，仍有許多文字資料會包含若干詞典未收錄的新詞，稱為未知詞(unknown words)
+* 未知詞通常與分析的文字資料所屬領域有極大的關係
+* 在未來的課程，我們將討論如何根據文字資料的分析結果，偵測可能的未知詞，以便擴增詞典，提升斷詞效能
+
+## 小結
+* 文字資料中，詞語出現的次數差異懸殊，少數詞語出現次數遠大於其他詞語(Zipf's Law)
+* 文字資料中出現較多次的詞語通常是介詞、連接詞、句末補語等停用詞
+* 因此若是只根據出現次數判斷詞語的重要性，可能找出的詞語中會有許多是停用詞
+
+## 小結
+* 停用詞通常廣泛地出現在各個文件上
+* 一般關鍵詞語則集中在少數文件上大量出現
+* 所以文字資料處理通常會利用IDF做為判斷停用詞的參考資訊
+
+## 小結
+* 在相同大小的圖形下，相較於長條圖，文字雲可以呈現更多的詞語
+* 文字雲可以提供分析者對於文字資料內容的速寫
+* 但長條圖可以提供更細節而正確的重要性比較與排序
