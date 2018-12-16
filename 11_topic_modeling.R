@@ -145,7 +145,7 @@ cohDF %>%
   ggplot(aes(x=num_topic, y=coherence)) +
   geom_line()
 
-ntopic = 12
+ntopic = 15
 control_list = list(alpha=0.01, seed=SEED, burnin=1000, thin=100, iter=1000, best=FALSE)
 model = LDA(dtm1, k = ntopic, control = control_list, method = "Gibbs")
 best_model = model@fitted[[which.max(logLik(model))]]
