@@ -4,8 +4,6 @@ library(lubridate)
 library(jiebaR)
 #文字處理套件
 library(tm)
-#tokenizers套件
-library(tokenizers)
 #疏鬆矩陣運算套件
 library(slam)
 #主題模型套件
@@ -75,14 +73,14 @@ dtm1 <- dtm1[doc.termno!=0, ]
 #產生亂數
 SEED = as.integer(Sys.time())%%10000
 
-#根據亂數值，切分文件為五等分
+#根據亂數值，切分文件為十等分
 set.seed(SEED)
 fold = 10
 folding = sample(rep(seq_len(fold), ceiling(nrow(dtm)))[seq_len(nrow(dtm))])
 chain.list = seq_len(fold)
 
 #設定主題模型的主題數量
-topics = c(1:5)*5
+topics = c(1:10)*3
 
 #以下利用10-fold cross validation計算不同主題數量下，每份語料在主題模型下的perplexity
 #perpDF用來儲存每種主題數量、每份語料的perplexity
@@ -104,6 +102,60 @@ for (ntopic in topics) {
   }
 }
 
+cohDF = data.frame(num_topic=integer(), coherence=double())
+doc_no <- nrow(dtm1)
+for (ntopic  in topics) {
+  #LDA主題模型的參數
+  control_list = list(alpha=0.01, seed=SEED, burnin=1000, thin=100, iter=1000, best=FALSE)
+  #訓練LDA主題模型
+  model = LDA(dtm1, k = ntopic, control = control_list, method = "Gibbs")
+  #選擇目前模型內最佳模型
+  best_model = model@fitted[[which.max(logLik(model))]]
+  
+  #主題內的詞語分布和文件內的主題分布
+  post_prob = posterior(best_model)
+  
+  #將每個主題前10個最重要的詞語
+  term_no = 10
+  topicterm = terms(best_model, term_no)
+  
+  coh = double(length=ntopic)
+  for (i in seq(1, ntopic)) {
+    t_idx <- sapply(topicterm[, i], function(x) which(dtm1$dimnames$Terms==x))
+    t_freq <- sapply(t_idx, function (x) length(which(dtm1$j==x))) / doc_no
+    t_docidx <- lapply(t_idx, function (x) dtm1$i[dtm1$j==x])
+    sum_pmi = 0
+    for (j in seq(1, term_no-1)) {
+      for (k in seq(j+1, term_no)) {
+        co_doc <- length(intersect(t_docidx[[j]], t_docidx[[k]])) / doc_no
+        pmi <- log(ifelse(co_doc>0,
+                          co_doc/(t_freq[j]*t_freq[k]),
+                          1e-12/(t_freq[j]*t_freq[k])))
+        sum_pmi = sum_pmi + pmi
+      }
+    }
+    coh[i] = sum_pmi*2 / (term_no*(term_no-1))
+  }
+  print(paste("ntopic:", ntopic, "Coherence:", mean(coh)))
+  cohDF = rbind(cohDF, data.frame(num_topic=ntopic, coherence=mean(coh)))
+}
+
+###
+cohDF %>%
+  ggplot(aes(x=num_topic, y=coherence)) +
+  geom_line()
+
+ntopic = 12
+control_list = list(alpha=0.01, seed=SEED, burnin=1000, thin=100, iter=1000, best=FALSE)
+model = LDA(dtm1, k = ntopic, control = control_list, method = "Gibbs")
+best_model = model@fitted[[which.max(logLik(model))]]
+## 各主題上的關鍵詞
+topicterm = terms(best_model, term_no)
+
+#主題內的詞語分布和文件內的主題分布
+post_prob = posterior(best_model)
+doc_topic_distr = post_prob$topics
+
 ######################################################
 # 根據主題在整個文件集合上的分布，找出重要的主題
 #
@@ -111,10 +163,7 @@ for (ntopic in topics) {
 #
 # 將主題依據其分布機率由大到小排序 order(colSums(doc_topic_distr), decreasing = TRUE)
 topics.order <- order(colSums(doc_topic_distr), decreasing = TRUE)
-
-# 查看分布機率最大的十個主題之前十個詞語
-lda_model$get_top_words(n = 10, lambda = 1.0)[, topics.order[1:10]]
-
+topicterm[, topics.order]
 
 ######################################################
 # 根據文件上的最主要(最大)主題，找出重要的主題
@@ -128,55 +177,4 @@ doc_max_topic <- apply(doc_topic_distr, 1, which.max)
 topics.order <- order(table(doc_max_topic), decreasing = TRUE)
 
 # 查看各文件最主要主題的十個主題之前十個詞語
-lda_model$get_top_words(n = 10, lambda = 0.5)[, topics.order[1:10]]
-
-####################################################
-# 驗證主題模型在新進資料上的有效性(validation)
-
-# 設定隨機取樣方式
-SEED = as.integer(Sys.time())%%10000
-
-set.seed(SEED)
-# 隨機將所有文件分為10等分(folds)
-fold = 10
-doc_no <- nrow(news)
-folding = sample(rep(seq_len(fold), ceiling(doc_no/fold))[seq_len(doc_no)])
-
-# 將資料分為訓練與測試資料
-training_set <- news[folding!=1, ]
-testing_set <- news[folding==1, ]
-
-# 將訓練資料轉換成text2vec所需的文字處理格式
-it <- itoken(training_set$words, progressbar = FALSE)
-
-# 抽取所有出現在文件中的詞語，並刪除不合預設條件的詞語
-vocab <- create_vocabulary(it, stopwords=stwd) %>%
-  prune_vocabulary(term_count_min = 20, doc_proportion_min = 0.02, doc_proportion_max = 0.1)
-
-# 設定詞語向量化
-vectorizer = vocab_vectorizer(vocab)
-
-# 計算詞語出現在文件上的次數(DTM)
-dtm = create_dtm(it, vectorizer)
-
-# 建立測試文件的DTM
-new_dtm = itoken(testing_set$words, progressbar = FALSE) %>% 
-  create_dtm(vectorizer)
-
-topics_seq = seq(10, 200, 10)
-
-for (topic_no in topics_seq) {
-  # 設定LDA主題模型的參數
-  lda_model = LDA$new(n_topics = topic_no, doc_topic_prior = 0.1, topic_word_prior = 0.01)
-
-  # 訓練主題模型
-  doc_topic_distr = 
-    lda_model$fit_transform(x = dtm, n_iter = 1000, 
-                            convergence_tol = 0.001, n_check_convergence = 25,
-                            progressbar = FALSE)
-  
-  new_doc_topic_distr = lda_model$transform(new_dtm)
-  
-  pp <- perplexity(new_dtm, topic_word_distribution = lda_model$topic_word_distribution, doc_topic_distribution = new_doc_topic_distr)
-  print(paste0("Topic No. ", topic_no, "   Perplexity: ", pp))
-}
+topicterm[, topics.order]
