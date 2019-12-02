@@ -29,7 +29,8 @@ news.df <- news.df %>%
   mutate(words=segment(text, mp.seg)) %>% # 斷詞
   mutate(words=filterChineseTerms(words)) %>% # 過濾去不包含中文字的候選詞語
   ungroup() %>%
-  select(id, Source, date, title, words)  # 選擇新聞編號和斷詞結果
+  select(id, Source, date, title, words) %>% # 選擇新聞編號和斷詞結果
+  mutate(day=date-as.Date("2019-09-23"))
 
 #建立語料庫
 vc = VCorpus(VectorSource(news.df$words))
@@ -77,7 +78,40 @@ news.df1 <- news.df[dtm1$dimnames$Docs, ]
 out$meta <- news.df1
 
 stora <- searchK(documents=out$documents, vocab=out$vocab,
-                 K=seq(2, 30, 2), prevalence=~Source,
+                 K=seq(4, 30, 2), prevalence=~Source+s(day),
                  data=out$meta, init.type = "LDA")
 
 plot.searchK(stora)
+
+dtFit <- selectModel(documents=out$documents, vocab=out$vocab,
+                     K=8, prevalence = ~Source+s(day),
+                     data=out$meta, init.type = "LDA")
+
+getEvalData <- function(x, idx) {
+  data.frame(model_idx=idx,
+             topic=sprintf("Topic%02d", 1:length(x)),
+             value=x,
+             stringsAsFactors = FALSE)
+}
+
+map2_dfr(dtFit$semcoh, seq(length(dtFit$semcoh)), getEvalData) %>%
+  mutate(model_idx=factor(model_idx)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=model_idx, y=value))
+
+map2_dfr(dtFit$exclusivity, seq(length(dtFit$exclusivity)), getEvalData) %>%
+  mutate(model_idx=factor(model_idx)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=model_idx, y=value))
+
+res <- dtFit$runout[[7]]
+
+x <- labelTopics(res, n=10)
+write.xlsx(x$frex, "parade_8.xlsx", "FREX")
+write.xlsx(x$score, "parade_8.xlsx", "score", append=TRUE)
+
+y <- findThoughts(res,
+                  texts=paste0(out$meta$Source, "(", out$meta$date, ")：", out$meta$title),
+                  n=10)
+
+write.xlsx(y$docs, "parade_8.xlsx", "News", append=TRUE)
