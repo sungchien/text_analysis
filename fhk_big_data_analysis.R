@@ -8,6 +8,7 @@ library(tm)
 library(slam)
 #主題模型套件
 library(topicmodels)
+library(xlsx)
 
 news.df <- read_csv(file="parade_text.csv")
 
@@ -49,17 +50,29 @@ term.count = col_sums(dtm)
 #統計詞語出現的文件數
 term.df = tapply(dtm$v, dtm$j, length)
 
-#統計出現總頻次大於5且出現文件數不大於100的詞語數
-length(which(term.count>5 & term.df<=100))
+#統計出現總頻次大於20
+cr1 <- term.count > 5
+length(which(cr1))
+#統計出現系所數不大於1/4系所總數
+cr2 <- term.df < 100
+length(which(cr2))
 
-#刪除詞語，保留文件-詞語矩陣上出現總頻次大於5且出現文件數不大於100的詞語
-dtm1 <- dtm[, term.count>5 & term.df<=100]
+stopwords <- c("的", "在", "是", "都", "了", "也", "很", "會", "有", "呢", "嗎", "就", "但", "所", "我", "不", "到", "要", "於")
+cr3 <- !(dtm$dimnames$Terms %in% stopwords)
+length(which(cr3))
+
+#統計出現總頻次大於20且出現系所數不大於1/4系所總數的詞語數
+length(which(cr1 & cr2 & cr3))
+
+#刪除詞語，保留文件-詞語矩陣上出現總頻次大於20且出現系所數不大於1/4系所總數的詞語
+dtm1 <- dtm[, cr1&cr2&cr3]
 
 #統計每一筆文件上出現的詞語數
 doc.termno = row_sums(dtm1)
 #是否有沒有詞語的文件
-which(doc.termno==0)
-dtm1 <- dtm1[doc.termno!=0, ]
+which(doc.termno<=10)
+dtm1 <- dtm1[doc.termno>10, ]
+news.df1 <- news.df[doc.termno>10, ]
 
 #產生亂數
 SEED = as.integer(Sys.time())%%10000
@@ -67,11 +80,11 @@ SEED = as.integer(Sys.time())%%10000
 #根據亂數值，切分文件為十等分
 set.seed(SEED)
 fold = 10
-folding = sample(rep(seq_len(fold), ceiling(nrow(dtm)))[seq_len(nrow(dtm))])
+folding = sample(rep(seq_len(fold), ceiling(nrow(dtm1)))[seq_len(nrow(dtm1))])
 chain.list = seq_len(fold)
 
 #設定主題模型的主題數量
-topics = c(1:10)*3
+topics = seq(4, 30, 2)
 
 #以下利用10-fold cross validation計算不同主題數量下，每份語料在主題模型下的perplexity
 #perpDF用來儲存每種主題數量、每份語料的perplexity
@@ -136,3 +149,49 @@ cohDF %>%
   ggplot(aes(x=num_topic, y=coherence)) +
   geom_line()
 
+ntopic = 8
+control_list = list(alpha=0.01, seed=SEED, burnin=1000, thin=100, iter=1000, best=FALSE)
+model = LDA(dtm1, k = ntopic, control = control_list, method = "Gibbs")
+best_model = model@fitted[[which.max(logLik(model))]]
+## 各主題上的關鍵詞
+topicterm = terms(best_model, term_no) %>%
+  t() %>%
+  as.data.frame(stringsAsFactors=FALSE) %>%
+  mutate(TopicName = rownames(.))
+  
+write.xlsx(topicterm, "parade_lda_8.xlsx", "term", row.names = FALSE)
+
+topicterm = topicterm %>%
+  gather(key="rank", value="term", -TopicName) %>%
+  mutate(rank = as.numeric(substr(rank, 2, nchar(rank))))
+
+#主題內的詞語分布和文件內的主題分布
+post_prob = posterior(best_model)
+doc_topic_distr = post_prob$topics
+
+######################################################
+# 根據主題在整個文件集合上的分布，找出重要的主題
+#
+# 統計主題分布機率 colSums(doc_topic_distr)
+#
+# 將主題依據其分布機率由大到小排序 order(colSums(doc_topic_distr), decreasing = TRUE)
+topics.order <- order(colSums(doc_topic_distr), decreasing = TRUE)
+topicterm[, topics.order]
+
+udn <- doc_topic_distr[news.df1$Source=="udn", ]
+udn.topics.order <- order(colSums(udn), decreasing = TRUE)
+
+ltn <- doc_topic_distr[news.df1$Source=="ltn", ]
+ltn.topics.order <- order(colSums(ltn), decreasing = TRUE)
+
+######################################################
+# 根據文件上的最主要(最大)主題，找出重要的主題
+#
+# 找出每篇文件最主要(最大)的主題
+doc_max_topic <- apply(doc_topic_distr, 1, which.max)
+#
+# 統計各主題為最主要者的文件數目 table(doc_max_topic)
+#
+#  將主題依據其為文件最主要主題數由大到小排序
+udn.topics.order2 <- order(table(doc_max_topic[news.df1$Source=="udn"]), decreasing = TRUE)
+ltn.topics.order2 <- order(table(doc_max_topic[news.df1$Source=="ltn"]), decreasing = TRUE)
