@@ -57,7 +57,14 @@ length(which(cr1))
 cr2 <- term.df < 100
 length(which(cr2))
 
-stopwords <- c("的", "在", "是", "都", "了", "也", "很", "會", "有", "呢", "嗎", "就", "但", "所", "我", "不", "到", "要", "於")
+stopwords <- c("的", "在", "是", "都", "了",
+               "也", "很", "會", "有", "呢",
+               "嗎", "就", "但", "所", "我",
+               "不", "到", "要", "於", "表示",
+               "公里", "一名", "可能", "認為",
+               "一次", "分享", "攝影", "繼續",
+               "這次", "近年", "特派記者",
+               "就是", "沒有", "他們", "指出")
 cr3 <- !(dtm$dimnames$Terms %in% stopwords)
 length(which(cr3))
 
@@ -105,6 +112,10 @@ for (ntopic in topics) {
     perpDF = rbind(perpDF, data.frame(num_topic=ntopic, chain=chain, perplexity=perp))
   }
 }
+
+perpDF %>%
+  ggplot() +
+  geom_line(aes(x=num_topic, y=perplexity, colour=factor(chain), group=factor(chain)))
 
 cohDF = data.frame(num_topic=integer(), coherence=double())
 doc_no <- nrow(dtm1)
@@ -161,6 +172,8 @@ topicterm = terms(best_model, term_no) %>%
   
 write.xlsx(topicterm, "parade_lda_8.xlsx", "term", row.names = FALSE)
 
+saveRDS(best_model, "parade_lda_8.rds")
+
 topicterm = topicterm %>%
   gather(key="rank", value="term", -TopicName) %>%
   mutate(rank = as.numeric(substr(rank, 2, nchar(rank))))
@@ -169,14 +182,36 @@ topicterm = topicterm %>%
 post_prob = posterior(best_model)
 doc_topic_distr = post_prob$topics
 
+doc_topic_distr.df = as.data.frame(doc_topic_distr)
+
+colnames(doc_topic_distr.df) <- paste0("Topic", 1:8)
+
+news.df1 <- news.df1 %>%
+  cbind(doc_topic_distr.df)
+  
+write.xlsx(news.df1, "parade_lda_8.xlsx", "news", row.names = FALSE, append=TRUE)
+
+news.df2 <- news.df1 %>%
+  gather(key="Topics", value="Probability", Topic1, Topic2, Topic3, Topic4, Topic5, Topic6, Topic7, Topic8)
+
 ######################################################
 # 根據主題在整個文件集合上的分布，找出重要的主題
 #
-# 統計主題分布機率 colSums(doc_topic_distr)
+# 統計主題分布機率
 #
-# 將主題依據其分布機率由大到小排序 order(colSums(doc_topic_distr), decreasing = TRUE)
-topics.order <- order(colSums(doc_topic_distr), decreasing = TRUE)
-topicterm[, topics.order]
+# 將主題依據其分布機率由大到小排序
+
+news.df2 %>%
+  group_by(Topics) %>%
+  summarise(Prob=mean(Probability)) %>%
+  arrange(desc(Prob))
+
+news.df2 %>%
+  group_by(Topics, Source) %>%
+  summarise(Prob=mean(Probability)) %>%
+  arrange(Source, desc(Prob)) %>%
+  ggplot() +
+  geom_col(aes(x=Topics, y=Prob, fill=Source), position="dodge")
 
 udn <- doc_topic_distr[news.df1$Source=="udn", ]
 udn.topics.order <- order(colSums(udn), decreasing = TRUE)
